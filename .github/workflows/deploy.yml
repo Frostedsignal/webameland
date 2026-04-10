@@ -23,6 +23,10 @@ jobs:
             if ! response=$(curl -sf \
               --user "$WP_USER:$WP_APP_PASSWORD" \
               "https://www.relaxenopameland.nl/wp-json/wp/v2/pages?per_page=100&page=$page"); then
+              if [ "$page" -gt 1 ]; then
+                echo "No more pages at page $page (API returned error). Done."
+                break
+              fi
               echo "Failed to fetch pages from API (page $page)"
               exit 1
             fi

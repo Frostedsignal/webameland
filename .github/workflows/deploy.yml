@@ -1,0 +1,55 @@
+name: Fetch WordPress Pages
+
+on:
+  workflow_dispatch:
+
+jobs:
+  fetch-pages:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Fetch all pages from WordPress
+        env:
+          WP_USER: ${{ secrets.WP_USER }}
+          WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
+        run: |
+          mkdir -p pages
+
+          page=1
+          while true; do
+            response=$(curl -s \
+              --user "$WP_USER:$WP_APP_PASSWORD" \
+              "https://www.relaxenopameland.nl/wp-json/wp/v2/pages?per_page=100&page=$page")
+
+            count=$(echo "$response" | jq 'length')
+
+            if [ "$count" -eq 0 ]; then
+              echo "No more pages at page $page. Done."
+              break
+            fi
+
+            echo "Fetched $count pages from API page $page"
+
+            echo "$response" | jq -c '.[]' | while read -r item; do
+              slug=$(echo "$item" | jq -r '.slug')
+              echo "$item" | jq '.' > "pages/${slug}.json"
+              echo "Saved pages/${slug}.json"
+            done
+
+            page=$((page + 1))
+          done
+
+      - name: Commit and push JSON files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add pages/
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "chore: update WordPress page exports"
+            git push
+          fi

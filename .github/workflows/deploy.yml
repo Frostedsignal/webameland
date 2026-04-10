@@ -20,11 +20,17 @@ jobs:
 
           page=1
           while true; do
-            response=$(curl -s \
+            if ! response=$(curl -sf \
               --user "$WP_USER:$WP_APP_PASSWORD" \
-              "https://www.relaxenopameland.nl/wp-json/wp/v2/pages?per_page=100&page=$page")
+              "https://www.relaxenopameland.nl/wp-json/wp/v2/pages?per_page=100&page=$page"); then
+              echo "Failed to fetch pages from API (page $page)"
+              exit 1
+            fi
 
-            count=$(echo "$response" | jq 'length')
+            if ! count=$(echo "$response" | jq 'length'); then
+              echo "Failed to parse API response on page $page"
+              exit 1
+            fi
 
             if [ "$count" -eq 0 ]; then
               echo "No more pages at page $page. Done."
@@ -33,11 +39,18 @@ jobs:
 
             echo "Fetched $count pages from API page $page"
 
-            echo "$response" | jq -c '.[]' | while read -r item; do
+            tmpfile=$(mktemp)
+            echo "$response" | jq -c '.[]' > "$tmpfile"
+            while IFS= read -r item; do
               slug=$(echo "$item" | jq -r '.slug')
+              if [[ ! "$slug" =~ ^[a-z0-9-]+$ ]]; then
+                echo "Skipping invalid slug: $slug"
+                continue
+              fi
               echo "$item" | jq '.' > "pages/${slug}.json"
               echo "Saved pages/${slug}.json"
-            done
+            done < "$tmpfile"
+            rm "$tmpfile"
 
             page=$((page + 1))
           done
